@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import { Check, Edit2, Mic, ShoppingCart, Calendar, Loader2, Utensils } from "lucide-react";
+import { Check, Edit2, Mic, ShoppingCart, Calendar, Loader2, Utensils, List } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useVoiceGuide } from "@/hooks/useVoiceGuide";
 
 interface AnalysisResultProps {
     status: string;
@@ -13,8 +15,6 @@ interface AnalysisResultProps {
     mealPlan: any[];
     shoppingList: any[];
 }
-
-import { useVoiceGuide } from "@/hooks/useVoiceGuide";
 
 export default function AnalysisResult({ status, ingredients, mealPlan, shoppingList }: AnalysisResultProps) {
     const [isListening, setIsListening] = useState(false);
@@ -35,7 +35,7 @@ export default function AnalysisResult({ status, ingredients, mealPlan, shopping
     // Web Speech API implementation
     const handleVoiceCorrection = () => {
         if (!('webkitSpeechRecognition' in window)) {
-            alert("Web Speech API not supported in this browser.");
+            alert("お使いのブラウザは音声認識に対応していません。");
             return;
         }
 
@@ -43,13 +43,13 @@ export default function AnalysisResult({ status, ingredients, mealPlan, shopping
         // @ts-ignore
         const recognition = new window.webkitSpeechRecognition();
         recognition.continuous = false;
-        recognition.lang = 'en-US'; // or 'ja-JP' depending on user preference
+        recognition.lang = 'ja-JP';
         recognition.interimResults = false;
 
         recognition.onresult = (event: any) => {
             const transcript = event.results[0][0].transcript;
             console.log("Voice Input:", transcript);
-            alert(`Voice Command Recognized: "${transcript}"\n(Logic to update ingredients would go here)`);
+            alert(`音声入力: "${transcript}"\n(食材修正ロジックがここに実装されます)`);
             setIsListening(false);
         };
 
@@ -68,138 +68,162 @@ export default function AnalysisResult({ status, ingredients, mealPlan, shopping
     if (status === "waiting" || status === "created") return null;
 
     return (
-        <div className="w-full max-w-5xl mx-auto space-y-8 pb-24">
+        <div className="w-full max-w-6xl mx-auto pb-24">
 
-            {/* Step 1: Ingredients (Progressive Display) */}
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="space-y-4"
-            >
-                <div className="flex items-center justify-between">
-                    <h2 className="text-2xl font-bold flex items-center text-white">
-                        <div className={`p-2 rounded-full mr-3 ${status === 'analyzing' ? 'bg-yellow-500/20 text-yellow-500 animate-pulse' : 'bg-green-500/20 text-green-500'}`}>
-                            {status === 'analyzing' ? <Loader2 className="w-6 h-6 animate-spin" /> : <Check className="w-6 h-6" />}
-                        </div>
-                        Detected Ingredients
-                    </h2>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className={`${isListening ? 'bg-red-500/20 text-red-500 border-red-500' : 'text-neutral-400 border-neutral-800'}`}
-                        onClick={handleVoiceCorrection}
-                    >
-                        <Mic className={`w-4 h-4 mr-2 ${isListening ? 'animate-pulse' : ''}`} />
-                        {isListening ? "Listening..." : "Correct with Voice"}
-                    </Button>
+            <Tabs defaultValue="ingredients" className="w-full">
+
+                {/* Navigation Header */}
+                <div className="w-full mb-8 pt-4">
+                    <TabsList className="grid w-full grid-cols-3 max-w-[600px] mx-auto bg-slate-800 p-1 rounded-full h-14 border border-slate-700">
+                        <TabsTrigger
+                            value="ingredients"
+                            className="rounded-full data-[state=active]:bg-white data-[state=active]:text-slate-900 text-slate-400 font-bold tracking-wide transition-all"
+                        >
+                            <Utensils className="w-4 h-4 mr-2" />
+                            認識結果
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="meal_plan"
+                            disabled={status !== 'done'}
+                            className="rounded-full data-[state=active]:bg-purple-500 data-[state=active]:text-white text-slate-400 font-bold tracking-wide transition-all"
+                        >
+                            <Calendar className="w-4 h-4 mr-2" />
+                            献立リスト
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="shopping_list"
+                            disabled={status !== 'done'}
+                            className="rounded-full data-[state=active]:bg-blue-500 data-[state=active]:text-white text-slate-400 font-bold tracking-wide transition-all"
+                        >
+                            <ShoppingCart className="w-4 h-4 mr-2" />
+                            買い物リスト
+                        </TabsTrigger>
+                    </TabsList>
                 </div>
 
-                <div className="bg-neutral-900/50 border border-neutral-800 rounded-2xl p-6">
-                    {ingredients && ingredients.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                            {ingredients.map((ing, i) => (
-                                <Badge key={i} variant="secondary" className="px-3 py-1 text-sm bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border-neutral-700">
-                                    {ing}
-                                </Badge>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="text-neutral-500 italic">
-                            {status === 'analyzing' ? "Analyzing images..." : "No ingredients detected."}
-                        </div>
-                    )}
-                </div>
-            </motion.div>
-
-            {/* Step 2: Meal Plan & Shopping List */}
-            {status === 'done' && (
-                <div className="grid lg:grid-cols-3 gap-8">
-
-                    {/* Meal Plan (2 cols) */}
-                    <motion.div
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.2 }}
-                        className="lg:col-span-2 space-y-4"
-                    >
-                        <h2 className="text-2xl font-bold text-white flex items-center">
-                            <Calendar className="w-6 h-6 mr-3 text-purple-400" />
-                            Weekly Plan
+                {/* Tab 1: Ingredients */}
+                <TabsContent value="ingredients" className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-3xl font-bold flex items-center text-white">
+                            <div className={`p-3 rounded-full mr-4 ${status === 'analyzing' ? 'bg-yellow-500/20 text-yellow-500 animate-pulse' :
+                                status === 'error' ? 'bg-red-500/20 text-red-500' :
+                                    'bg-green-500/20 text-green-500'
+                                }`}>
+                                {status === 'analyzing' ? <Loader2 className="w-8 h-8 animate-spin" /> :
+                                    status === 'error' ? <span className="text-2xl font-bold">!</span> :
+                                        <Check className="w-8 h-8" />}
+                            </div>
+                            検出された食材
                         </h2>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className={`h-10 px-4 rounded-full border-white/10 hover:bg-white/5 ${isListening ? 'bg-red-500/20 text-red-500 border-red-500/50' : 'text-neutral-300'}`}
+                            onClick={handleVoiceCorrection}
+                        >
+                            <Mic className={`w-4 h-4 mr-2 ${isListening ? 'animate-pulse' : ''}`} />
+                            {isListening ? "聞き取り中..." : "音声で修正"}
+                        </Button>
+                    </div>
 
-                        <div className="grid gap-4">
-                            {mealPlan && mealPlan.map((dayPlan, i) => (
-                                <Card key={i} className="bg-neutral-900/50 border-neutral-800 overflow-hidden text-neutral-200">
-                                    <div className="flex flex-col md:flex-row">
-                                        <div className="bg-neutral-800/50 px-4 py-3 md:w-32 flex items-center justify-center md:justify-start font-bold text-neutral-400 uppercase tracking-widest text-sm">
-                                            {dayPlan.day}
-                                        </div>
-                                        <div className="p-4 flex-1 grid sm:grid-cols-3 gap-4 text-sm">
-                                            <div>
-                                                <span className="text-xs text-neutral-500 block mb-1">BREAKFAST</span>
-                                                {dayPlan.meals.breakfast}
-                                            </div>
-                                            <div>
-                                                <span className="text-xs text-neutral-500 block mb-1">LUNCH</span>
-                                                {dayPlan.meals.lunch}
-                                            </div>
-                                            <div>
-                                                <span className="text-xs text-neutral-500 block mb-1">DINNER</span>
-                                                <span className="font-medium text-white">{dayPlan.meals.dinner}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </Card>
-                            ))}
-                        </div>
-                    </motion.div>
-
-                    {/* Shopping List (1 col) */}
-                    <motion.div
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.4 }}
-                        className="space-y-4"
-                    >
-                        <h2 className="text-2xl font-bold text-white flex items-center">
-                            <ShoppingCart className="w-6 h-6 mr-3 text-blue-400" />
-                            Shopping List
-                        </h2>
-
-                        <Card className="bg-neutral-900/50 border-neutral-800 h-fit sticky top-4">
-                            <CardHeader>
-                                <CardTitle className="text-lg text-neutral-200">To Buy</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {shoppingList && shoppingList.map((item, i) => (
-                                    <div key={i} className="flex items-start justify-between group">
-                                        <div className="flex items-center">
-                                            <div className="w-4 h-4 rounded border border-neutral-600 mr-3 group-hover:border-blue-500 transition-colors" />
-                                            <span className="text-neutral-300 text-sm">{item.item}</span>
-                                        </div>
-                                        {item.reason === 'bargain' && (
-                                            <Badge variant="outline" className="text-[10px] px-1 py-0 border-yellow-500/50 text-yellow-500 bg-yellow-500/10">
-                                                SALE
-                                            </Badge>
-                                        )}
-                                    </div>
+                    <div className="bg-white rounded-3xl p-8 min-h-[400px] shadow-xl border border-slate-200">
+                        {ingredients && ingredients.length > 0 ? (
+                            <div className="flex flex-wrap gap-3">
+                                {ingredients.map((ing, i) => (
+                                    <Badge key={i} variant="secondary" className="px-6 py-3 text-lg bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200 transition-colors">
+                                        {ing}
+                                    </Badge>
                                 ))}
-
-                                {(!shoppingList || shoppingList.length === 0) && (
-                                    <div className="text-center py-8 text-neutral-500 text-sm">
-                                        No items needed. <br />You have everything!
-                                    </div>
+                            </div>
+                        ) : (
+                            <div className="text-slate-400 italic flex items-center justify-center h-full min-h-[300px]">
+                                {status === 'analyzing' ? (
+                                    <span className="animate-pulse">画像を解析中... (10~20秒ほどかかります)</span>
+                                ) : status === 'error' ? (
+                                    <span className="text-red-500 flex items-center gap-2">
+                                        解析に失敗しました。もう一度お試しください。
+                                    </span>
+                                ) : (
+                                    "食材が見つかりませんでした。"
                                 )}
+                            </div>
+                        )}
+                    </div>
+                </TabsContent>
 
-                                <Button className="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white">
-                                    Send to Phone
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    </motion.div>
+                {/* Tab 2: Meal Plan */}
+                <TabsContent value="meal_plan" className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <h2 className="text-3xl font-bold text-white flex items-center mb-6">
+                        <Calendar className="w-8 h-8 mr-4 text-purple-400" />
+                        今週の献立
+                    </h2>
+                    <div className="grid gap-6">
+                        {mealPlan && mealPlan.map((dayPlan, i) => (
+                            <Card key={i} className="bg-white border-transparent overflow-hidden text-slate-700 group shadow-md hover:shadow-lg transition-all">
+                                <div className="flex flex-col md:flex-row">
+                                    <div className="bg-slate-50 px-6 py-4 md:w-32 flex items-center justify-center md:justify-start font-bold text-slate-900 text-lg md:text-xl uppercase tracking-widest border-b md:border-b-0 md:border-r border-slate-100">
+                                        {dayPlan.day}
+                                    </div>
+                                    <div className="p-6 flex-1 grid sm:grid-cols-3 gap-6 text-sm">
+                                        <div>
+                                            <span className="text-xs text-slate-400 font-bold block mb-2 tracking-wider">朝食</span>
+                                            <span className="text-slate-700 text-base">{dayPlan.meals.breakfast}</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-xs text-slate-400 font-bold block mb-2 tracking-wider">昼食</span>
+                                            <span className="text-slate-700 text-base">{dayPlan.meals.lunch}</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-xs text-slate-400 font-bold block mb-2 tracking-wider">夕食</span>
+                                            <span className="font-bold text-slate-900 text-lg">{dayPlan.meals.dinner}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </Card>
+                        ))}
+                    </div>
+                </TabsContent>
 
-                </div>
-            )}
+                {/* Tab 3: Shopping List */}
+                <TabsContent value="shopping_list" className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <h2 className="text-3xl font-bold text-white flex items-center mb-6">
+                        <ShoppingCart className="w-8 h-8 mr-4 text-blue-400" />
+                        買い物リスト
+                    </h2>
+                    <Card className="bg-white border-transparent shadow-xl rounded-3xl">
+                        <CardHeader className="border-b border-slate-100 pb-4">
+                            <CardTitle className="text-xl text-slate-900">買うもの</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4 pt-6">
+                            {shoppingList && shoppingList.map((item, i) => (
+                                <div key={i} className="flex items-start justify-between group p-2 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
+                                    <div className="flex items-center">
+                                        <div className="w-5 h-5 rounded border border-slate-300 mr-3 flex items-center justify-center group-hover:border-blue-500 transition-colors">
+                                        </div>
+                                        <span className="text-slate-800 text-lg">{item.item}</span>
+                                    </div>
+                                    {item.reason === 'bargain' && (
+                                        <Badge variant="outline" className="text-xs px-2 py-1 border-yellow-500/50 text-yellow-600 bg-yellow-500/10">
+                                            特売
+                                        </Badge>
+                                    )}
+                                </div>
+                            ))}
+
+                            {(!shoppingList || shoppingList.length === 0) && (
+                                <div className="text-center py-12 text-slate-400">
+                                    必要なものはありません。<br />完璧です！
+                                </div>
+                            )}
+
+                            <Button className="w-full mt-6 bg-blue-600 hover:bg-blue-500 text-white font-bold py-6 rounded-xl shadow-lg shadow-blue-900/20 text-lg">
+                                スマホに送る
+                            </Button>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+            </Tabs>
         </div>
     );
 }

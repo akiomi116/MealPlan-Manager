@@ -12,7 +12,7 @@ export default function SettingsPage() {
     const { fontSize, highContrast, voiceEnabled, setFontSize, setHighContrast, setVoiceEnabled } = useSettings();
 
     return (
-        <div className={`min-h-screen p-6 ${highContrast ? 'bg-white text-black' : 'bg-neutral-950 text-neutral-100'}`}>
+        <div className={`min-h-screen p-6 ${highContrast ? 'bg-white text-black' : 'bg-background text-foreground'}`}>
             <div className="max-w-3xl mx-auto space-y-12">
 
                 {/* Header */}

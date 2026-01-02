@@ -24,6 +24,27 @@ def read_root():
 def health_check(db: Session = Depends(database.get_db)):
     return {"status": "ok", "db": "connected"}
 
+import socket
+import traceback
+
+@app.get("/api/network-info")
+def get_network_info():
+    ip = "127.0.0.1"
+    try:
+        # Connect to an external server (Google DNS) to get the interface IP used for routing
+        # This is more reliable than gethostbyname(gethostname()) which might return 127.0.0.1
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(2.0)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        print(f"Network Info: Detected IP {ip}")
+    except Exception as e:
+        print(f"Network Info Error: {e}")
+        traceback.print_exc()
+        ip = "127.0.0.1"
+    return {"ip": ip, "port": 3000}
+
 # --- Session & Upload APIs ---
 
 @app.post("/api/session/{session_id}/images")
@@ -32,21 +53,38 @@ async def upload_images(
     files: list[UploadFile] = File(...),
     db: Session = Depends(database.get_db)
 ):
-    # 1. Ensure upload dir exists
-    UPLOAD_DIR = "uploads"
-    import os
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    
-    saved_paths = []
-    for file in files:
-        # Use simple timestamp to avoid collisions
+    try:
+        # 1. Ensure upload dir exists
+        UPLOAD_DIR = "uploads"
+        import os
         import time
-        timestamp = int(time.time() * 1000)
-        file_path = f"{UPLOAD_DIR}/{session_id}_{timestamp}_{file.filename}"
-        with open(file_path, "wb") as buffer:
-            content = await file.read()
-            buffer.write(content)
-        saved_paths.append(file_path)
+        import traceback
+        
+        if not os.path.exists(UPLOAD_DIR):
+            os.makedirs(UPLOAD_DIR, exist_ok=True)
+        
+        saved_paths = []
+        for file in files:
+            # Use simple timestamp to avoid collisions
+            timestamp = int(time.time() * 1000)
+            
+            # Sanitize filename (remove non-ascii to avoid Windows encoding issues)
+            original_name = file.filename or "unknown.jpg"
+            safe_name = "".join(c for c in original_name if c.isalnum() or c in "._-")
+            if not safe_name: safe_name = "image.jpg"
+            
+            file_path = f"{UPLOAD_DIR}/{session_id}_{timestamp}_{safe_name}"
+            
+            print(f"Saving file to: {file_path}") # Debug log
+            
+            with open(file_path, "wb") as buffer:
+                content = await file.read()
+                buffer.write(content)
+            saved_paths.append(file_path)
+    except Exception as e:
+        print(f"Upload Error: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Server Upload Error: {str(e)}")
     
     # 2. Update DB
     db_session = db.query(models.Session).filter(models.Session.id == session_id).first()
@@ -93,38 +131,53 @@ def start_analysis(session_id: str, db: Session = Depends(database.get_db)):
     db_session.status = "analyzing"
     db.commit()
     
-    # 1. Detect Ingredients (Sync for now, async better for prod)
-    from services.ai_service import detect_ingredients, generate_plan
-    from services.scraper_service import get_bargain_items
-    
-    # Run in background ideally, but for MVP blocking is ok if < 30s
-    # Step A: Ingredients
-    detection_result = detect_ingredients(db_session.image_paths)
-    ingredients = detection_result.get("ingredients", [])
-    
-    db_session.detected_ingredients = ingredients
-    db_session.status = "ingredients_ready"
-    db.commit()
-    
-    # Step B: Bargain Items (Mock)
-    bargains = get_bargain_items()
-    
-    # Step C: Generate Plan
-    plan_result = generate_plan(ingredients, bargains)
-    
-    # Save Results
-    generated_plan_data = plan_result.get("meal_plan", [])
-    shopping_list_data = plan_result.get("shopping_list", [])
-    
-    # Save Plan
-    new_plan = models.GeneratedPlan(session_id=session_id, content=generated_plan_data)
-    db.add(new_plan)
-    
-    # Save List
-    new_list = models.ShoppingList(session_id=session_id, content=shopping_list_data)
-    db.add(new_list)
-    
-    db_session.status = "done"
-    db.commit()
-    
-    return {"status": "done", "ingredients": ingredients}
+    try:
+        # 1. Detect Ingredients (Sync for now, async better for prod)
+        try:
+            from backend.services.ai_service import detect_ingredients, generate_plan
+            from backend.services.scraper_service import get_bargain_items
+        except ImportError:
+             # Fallback if running from within backend dir
+             from services.ai_service import detect_ingredients, generate_plan
+             from services.scraper_service import get_bargain_items
+        
+        # Run in background ideally, but for MVP blocking is ok if < 30s
+        # Step A: Ingredients
+        print(f"Starting detection for session {session_id} with paths: {db_session.image_paths}")
+        detection_result = detect_ingredients(db_session.image_paths)
+        ingredients = detection_result.get("ingredients", [])
+        
+        db_session.detected_ingredients = ingredients
+        db_session.status = "ingredients_ready"
+        db.commit()
+        
+        # Step B: Bargain Items (Mock)
+        bargains = get_bargain_items()
+        
+        # Step C: Generate Plan
+        print(f"Starting planning for session {session_id}")
+        plan_result = generate_plan(ingredients, bargains)
+        
+        # Save Results
+        generated_plan_data = plan_result.get("meal_plan", [])
+        shopping_list_data = plan_result.get("shopping_list", [])
+        
+        # Save Plan
+        new_plan = models.GeneratedPlan(session_id=session_id, content=generated_plan_data)
+        db.add(new_plan)
+        
+        # Save List
+        new_list = models.ShoppingList(session_id=session_id, content=shopping_list_data)
+        db.add(new_list)
+        
+        db_session.status = "done"
+        db.commit()
+        
+        return {"status": "done", "ingredients": ingredients}
+
+    except Exception as e:
+        print(f"Analysis Error: {e}")
+        traceback.print_exc()
+        db_session.status = "error"
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")

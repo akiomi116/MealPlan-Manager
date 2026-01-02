@@ -10,7 +10,7 @@ class User(Base):
     username = Column(String, unique=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    sessions = relationship("Session", back_populates="user")
+    # sessions = relationship("Session", back_populates="user")
 
 class Session(Base):
     __tablename__ = "sessions"

@@ -9,7 +9,6 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./db_data:/var/lib/postgresql/data
 
-volumes:
-  postgres_data:
+# Removed named volume section as we are using bind mount

@@ -10,13 +10,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useVoiceGuide } from "@/hooks/useVoiceGuide";
 
 interface AnalysisResultProps {
-    status: string;
-    ingredients: string[];
-    mealPlan: any[];
-    shoppingList: any[];
+    data: {
+        status: string;
+        ingredients: string[];
+        mealPlan: any[];
+        shoppingList: any[];
+    };
 }
 
-export default function AnalysisResult({ status, ingredients, mealPlan, shoppingList }: AnalysisResultProps) {
+export default function AnalysisResult({ data }: AnalysisResultProps) {
+    const { status, ingredients, mealPlan, shoppingList } = data;
     const [isListening, setIsListening] = useState(false);
     const { speak } = useVoiceGuide();
 
@@ -74,10 +77,10 @@ export default function AnalysisResult({ status, ingredients, mealPlan, shopping
 
                 {/* Navigation Header */}
                 <div className="w-full mb-8 pt-4">
-                    <TabsList className="grid w-full grid-cols-3 max-w-[600px] mx-auto bg-slate-800 p-1 rounded-full h-14 border border-slate-700">
+                    <TabsList className="grid w-full grid-cols-3 max-w-[600px] mx-auto bg-slate-100 p-1 rounded-full h-14 border border-slate-200">
                         <TabsTrigger
                             value="ingredients"
-                            className="rounded-full data-[state=active]:bg-white data-[state=active]:text-slate-900 text-slate-400 font-bold tracking-wide transition-all"
+                            className="rounded-full data-[state=active]:bg-white data-[state=active]:text-slate-900 text-slate-500 font-bold tracking-wide transition-all shadow-sm"
                         >
                             <Utensils className="w-4 h-4 mr-2" />
                             認識結果
@@ -104,7 +107,7 @@ export default function AnalysisResult({ status, ingredients, mealPlan, shopping
                 {/* Tab 1: Ingredients */}
                 <TabsContent value="ingredients" className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-3xl font-bold flex items-center text-white">
+                        <h2 className="text-3xl font-bold flex items-center text-slate-900">
                             <div className={`p-3 rounded-full mr-4 ${status === 'analyzing' ? 'bg-yellow-500/20 text-yellow-500 animate-pulse' :
                                 status === 'error' ? 'bg-red-500/20 text-red-500' :
                                     'bg-green-500/20 text-green-500'
@@ -153,7 +156,7 @@ export default function AnalysisResult({ status, ingredients, mealPlan, shopping
 
                 {/* Tab 2: Meal Plan */}
                 <TabsContent value="meal_plan" className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <h2 className="text-3xl font-bold text-white flex items-center mb-6">
+                    <h2 className="text-3xl font-bold text-slate-900 flex items-center mb-6">
                         <Calendar className="w-8 h-8 mr-4 text-purple-400" />
                         今週の献立
                     </h2>
@@ -186,7 +189,7 @@ export default function AnalysisResult({ status, ingredients, mealPlan, shopping
 
                 {/* Tab 3: Shopping List */}
                 <TabsContent value="shopping_list" className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <h2 className="text-3xl font-bold text-white flex items-center mb-6">
+                    <h2 className="text-3xl font-bold text-slate-900 flex items-center mb-6">
                         <ShoppingCart className="w-8 h-8 mr-4 text-blue-400" />
                         買い物リスト
                     </h2>

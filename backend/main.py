@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from . import models, database
+from pydantic import BaseModel
 
 try:
     models.Base.metadata.create_all(bind=database.engine)
@@ -13,7 +14,7 @@ app = FastAPI(title="Smart Meal Manager API")
 # CORS middleware to allow requests from frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -26,6 +27,24 @@ def read_root():
 @app.get("/health")
 def health_check(db: Session = Depends(database.get_db)):
     return {"status": "ok", "db": "connected"}
+
+@app.get("/api/reset")
+def reset_all_sessions():
+    MOCK_SESSIONS.clear()
+    return {"status": "cleared"}
+
+class RecipeSuggestionRequest(BaseModel):
+    ingredient: str
+
+@app.post("/api/recipes/suggest")
+def suggest_recipes_endpoint(req: RecipeSuggestionRequest):
+    try:
+        from backend.services.ai_service import suggest_recipes
+    except ImportError:
+        from services.ai_service import suggest_recipes
+    
+    recipes = suggest_recipes(req.ingredient)
+    return {"recipes": recipes}
 
 import socket
 import traceback
@@ -222,13 +241,25 @@ def start_analysis(session_id: str, db: Session = Depends(database.get_db)):
         
         # Run in background ideally, but for MVP blocking is ok if < 30s
         # Step A: Ingredients
-        print(f"Starting detection for session {session_id} with paths: {db_session.image_paths}")
-        detection_result = detect_ingredients(db_session.image_paths)
+        # Determine paths to use (DB or Mock)
+        image_paths = []
+        if db_session:
+            image_paths = db_session.image_paths
+        elif mock_session:
+            image_paths = mock_session["image_paths"]
+            
+        print(f"Starting detection for session {session_id} with paths: {image_paths}")
+        detection_result = detect_ingredients(image_paths)
         ingredients = detection_result.get("ingredients", [])
         
-        db_session.detected_ingredients = ingredients
-        db_session.status = "ingredients_ready"
-        db.commit()
+        # Save Ingredients
+        if db_session:
+            db_session.detected_ingredients = ingredients
+            db_session.status = "ingredients_ready"
+            db.commit()
+        if mock_session:
+            mock_session["detected_ingredients"] = ingredients
+            mock_session["status"] = "ingredients_ready"
         
         # Step B: Bargain Items (Mock)
         bargains = get_bargain_items()
@@ -241,22 +272,58 @@ def start_analysis(session_id: str, db: Session = Depends(database.get_db)):
         generated_plan_data = plan_result.get("meal_plan", [])
         shopping_list_data = plan_result.get("shopping_list", [])
         
-        # Save Plan
-        new_plan = models.GeneratedPlan(session_id=session_id, content=generated_plan_data)
-        db.add(new_plan)
-        
-        # Save List
-        new_list = models.ShoppingList(session_id=session_id, content=shopping_list_data)
-        db.add(new_list)
-        
-        db_session.status = "done"
-        db.commit()
+        # Save Plan & List (DB)
+        if db_session:
+            new_plan = models.GeneratedPlan(session_id=session_id, content=generated_plan_data)
+            db.add(new_plan)
+            
+            new_list = models.ShoppingList(session_id=session_id, content=shopping_list_data)
+            db.add(new_list)
+            
+            db_session.status = "done"
+            db.commit()
+            
+        # Save Plan & List (Mock)
+        if mock_session:
+            mock_session["meal_plan"] = generated_plan_data
+            mock_session["shopping_list"] = shopping_list_data
+            mock_session["status"] = "done"
         
         return {"status": "done", "ingredients": ingredients}
 
     except Exception as e:
         print(f"Analysis Error: {e}")
         traceback.print_exc()
-        db_session.status = "error"
-        db.commit()
+        if db_session:
+            db_session.status = "error"
+            db.commit()
+        if mock_session:
+            mock_session["status"] = "error"
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+@app.get("/api/session/{session_id}/result")
+def get_session_result(session_id: str, db: Session = Depends(database.get_db)):
+    # Try DB
+    try:
+        db_session = db.query(models.Session).filter(models.Session.id == session_id).first()
+        if db_session:
+            return {
+                "status": db_session.status,
+                "ingredients": db_session.detected_ingredients,
+                "mealPlan": db_session.meal_plan.content if db_session.meal_plan else [],
+                "shoppingList": db_session.shopping_list.content if db_session.shopping_list else []
+            }
+    except:
+        pass
+        
+    # Try Mock
+    if session_id in MOCK_SESSIONS:
+        s = MOCK_SESSIONS[session_id]
+        return {
+            "status": s["status"],
+            "ingredients": s["detected_ingredients"],
+            "mealPlan": s["meal_plan"],
+            "shoppingList": s["shopping_list"]
+        }
+        
+    raise HTTPException(status_code=404, detail="Session not found")
